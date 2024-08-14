@@ -1,0 +1,239 @@
+---
+title: "Airbnb - Bangkok"
+author: "Aung Thura Htoo"
+date: "2024-08-13"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+#https://insideairbnb.com/bangkok/
+```
+
+
+**Set the Directory, Loaded the data, and "tidyverse"**
+
+```{r}
+
+setwd("D:/me/R-Language/Practice/Dataset")
+
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+install.packages("tidyverse")
+library(tidyverse)
+
+# Load the CSV file into a data frame
+data <- read.csv("listings_airbnb_Aug2024.csv")
+```
+
+**Check the data and Columns**
+
+```{r}
+# View the first few rows of the data
+head(data)
+str(data)
+
+unique_room_type <- unique(data$room_type)
+unique_room_type
+
+```
+
+**Distribution of the Room Type**
+
+```{r}
+data %>%
+  count(room_type) %>%
+  ggplot(aes(x = reorder(room_type, -n), y = n)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black", width = 0.7) +
+  geom_text(aes(label = n), vjust = -0.5, color = "black", size = 3.5) +
+  labs(title = "Distribution of Room Types", x = "Room Type", y = NULL) +
+  theme_minimal() + 
+  theme(plot.title = element_text(hjust = 0.5))
+  
+```
+
+**Hosts with multiple listings**
+
+```{r}
+
+top_hosts <- data %>%
+  group_by(host_name, room_type) %>%
+  summarize(listings_count = n(), .groups = 'drop') %>%
+  pivot_wider(
+    names_from = room_type,
+    values_from = listings_count,
+    values_fill = list(listings_count = 0)  # Fill in 0 for missing values
+  ) %>%
+  mutate(
+    `Listings` = `Entire home/apt` + `Private room` + `Shared room` + `Hotel room`
+  ) %>% arrange(desc(Listings))
+
+top_hosts
+
+```
+
+**Availability Distribution for Short-Term vs Long-Term Rentals**
+
+```{r}
+
+short_term <- data %>% filter(minimum_nights <= 7)
+long_term <- data %>% filter(minimum_nights > 7)
+
+
+ggplot() +
+  geom_histogram(data = short_term, aes(x = availability_365, fill = 'Short-Term'), bins = 30, alpha = 0.5) +
+  geom_histogram(data = long_term, aes(x = availability_365, fill = 'Long-Term'), bins = 30, alpha = 0.5) +
+  labs(title = "Availability Distribution for Short-Term vs Long-Term Rentals",
+       x = "Availability (days per year)",
+       y = "Count") +
+  scale_fill_manual(values = c('Short-Term' = 'blue', 'Long-Term' = 'red')) +
+  theme_minimal()
+
+```
+
+**Mean, Median, and Avg_availability of short-term vs long-term rentals**
+
+```{r}
+summary_short_term <- short_term %>%
+  summarise(average_price = mean(price, na.rm = TRUE),
+            median_price = median(price, na.rm = TRUE),
+            avg_availability = mean(availability_365, na.rm = TRUE))
+
+summary_long_term <- long_term %>%
+  summarise(average_price = mean(price, na.rm = TRUE),
+            median_price = median(price, na.rm = TRUE),
+            avg_availability = mean(availability_365, na.rm = TRUE))
+
+summary_short_term
+summary_long_term
+
+```
+
+**Clean NA and infinite numbers**
+
+```{r}
+sum(!is.finite(data$price))
+sum(is.na(data$price))
+
+data_clean <- data %>%
+  filter(is.finite(price) & !is.na(price))
+
+str(data_clean)
+```
+
+**Boxplot of prices by room type**
+
+```{r}
+# Boxplot of prices by room type
+data_clean %>% ggplot(aes(x = room_type, y = price)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  labs(title = "Price by Room Type", x = "Room Type", y = "Price")
+
+```
+
+**Boxplot of prices by room type without outliers**
+
+```{r}
+# Boxplot of prices by room type with y-axis limits
+data_clean %>% ggplot(aes(x = room_type, y = price)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  labs(title = "Price by Room Type", x = "Room Type", y = "Price") +
+  coord_cartesian(ylim = c(0, 6000))
+
+```
+
+------------------------------------------------------------------------
+
+**Scatter plot of price vs. number of reviews**
+
+```{r}
+# Scatter plot of price vs. number of reviews
+data_clean %>%
+  ggplot(aes(x = number_of_reviews, y = price)) +
+  geom_point() +
+  labs(title = "Price vs. Number of Reviews", x = "Number of Reviews", y = "Price")+ 
+  coord_cartesian(ylim = c(0, 10000))
+
+# Compute correlation
+cor(data_clean$price, data_clean$number_of_reviews, use = "complete.obs")
+
+```
+
+**15 highest Listings by Neighborhood**
+
+```{r}
+# Count of listings by neighborhood and select top 15
+neighborhood_counts <- data_clean %>%
+  group_by(neighbourhood) %>%
+  summarise(count = n()) %>%
+  slice_max(order_by = count, n = 15)
+neighborhood_counts
+
+# Bar plot of listing counts by neighborhood, arranged in descending order
+neighborhood_counts %>% ggplot(aes(x = reorder(neighbourhood, -count), y = count)) +
+  geom_bar(stat = "identity", fill = "lightcoral", color = "darkred") +
+  labs(title = "15 highest Listings by Neighborhood", x = "Neighborhood", y = "Number of Listings") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+**15 Highest Average Price by Neighborhood**
+
+```{r}
+# Average price by neighborhood
+neighborhood_avg_price <- data_clean %>%
+  group_by(neighbourhood) %>%
+  summarise(avg_price = mean(price, na.rm = TRUE))%>%
+  slice_max(order_by = avg_price, n = 15)
+
+# Bar plot of average price by neighborhood
+neighborhood_avg_price %>% ggplot(aes(x = reorder(neighbourhood, -avg_price), y = avg_price)) +
+  geom_bar(stat = "identity", fill = "lightblue", color = "blue") +
+  labs(title = "15 Highest Average Price by Neighborhood", x = "Neighborhood", y = "Average Price") +
+  coord_cartesian(ylim = c(0, 10000)) +  # Adjust y-axis as needed
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+**Cleaning Data with sf package to create a geometry column using latitude and longitude**
+
+```{r}
+install.packages("sf")
+library(sf)
+
+```
+
+```{r}
+
+data_clean_sf <- st_as_sf(data_clean, coords = c("longitude", "latitude"), crs = 4326)
+
+```
+
+**
+```{r}
+install.packages("plotly")
+library(plotly)
+```
+
+**Geographical Distribution of Airbnb - Bangkok Listings along with their Price**
+```{r}
+
+# Creating the ggplot object
+p <- ggplot(data_clean_sf) +
+  geom_sf(aes(color = neighbourhood, text = paste("Neighbourhood:", neighbourhood, "<br>Price (THB):", price))) +
+  theme_minimal() +
+  labs(title = "Geographical Distribution of Airbnb - Bangkok Listings",
+       subtitle = "Colored by Neighborhood",
+       x = "Longitude",
+       y = "Latitude") +
+  theme(legend.position = "none")  # Remove the legend
+
+# Converting to an interactive plot
+p_interactive <- ggplotly(p, tooltip = "text")
+
+# Displaying the interactive plot
+p_interactive
+
+
+```
+
+
